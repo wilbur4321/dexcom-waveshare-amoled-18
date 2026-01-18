@@ -3,7 +3,13 @@
 #include "Arduino_DriveBus_Library.h"
 #include "HWCDC.h"
 #include <Wire.h>
+#include <Dexcom.h>
 #include "pin_config.h"
+
+#include "secrets.h"
+
+#define DELAY_TIME 60000
+Dexcom dexcom;
 
 HWCDC USBSerial;
 
@@ -18,14 +24,11 @@ std::shared_ptr<Arduino_IIC_DriveBus> IIC_Bus =
   std::make_shared<Arduino_HWIIC>(IIC_SDA, IIC_SCL, &Wire);
 
 void Arduino_IIC_Touch_Interrupt(void);
+void displayStatus(const char* message);
 
 std::unique_ptr<Arduino_IIC> FT3168(new Arduino_FT3x68(
     IIC_Bus, FT3168_DEVICE_ADDRESS,
     DRIVEBUS_DEFAULT_VALUE, TP_INT, Arduino_IIC_Touch_Interrupt));
-
-void Arduino_IIC_Touch_Interrupt(void) {
-  FT3168->IIC_Interrupt_Flag = true;
-}
 
 void setup() {
   USBSerial.begin(115200);
@@ -52,9 +55,34 @@ void setup() {
 
   gfx->setCursor(10, 10);
   gfx->setTextColor(RGB565_RED);
-  gfx->println("Hello World!");
+  gfx->setTextSize(3);
 
-  delay(5000); // 5 seconds
+  displayStatus("Connecting to WiFi...");
+  USBSerial.printf("Connecting to %s  ", wifi_ssid);
+  WiFi.begin(wifi_ssid, wifi_password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    USBSerial.print(".");
+  }
+  USBSerial.println(" CONNECTED");
+
+  displayStatus("Connecting to Dexcom...");
+  USBSerial.printf("Connecting to Dexcom account %s ", dexcom_username);
+  dexcom.createSession(dexcom_username, dexcom_password);
+  if (dexcom.accountStatus == DexcomStatus::LoggedIn) {
+    displayStatus("Connected!");
+  } else {
+    switch (dexcom.accountStatus) {
+        case DexcomStatus::SessionNotValid:   displayStatus("Session ID invalid"); break;
+        case DexcomStatus::SessionNotFound:   displayStatus("Session not found"); break;
+        case DexcomStatus::AccountNotFound:   displayStatus("Account not found"); break;
+        case DexcomStatus::PasswordInvalid:   displayStatus("Password invalid"); break;
+        case DexcomStatus::MaxAttempts:       displayStatus("Maximum authentication attempts exceeded"); break;
+        case DexcomStatus::UsernameNullEmpty: displayStatus("Username NULL or empty"); break;
+        case DexcomStatus::PasswordNullEmpty: displayStatus("Password NULL or empty"); break;
+        default: displayStatus("Unknown error"); break;
+    }
+  }
 }
 
 void loop() {
@@ -63,10 +91,58 @@ void loop() {
     gfx->fillScreen(RGB565_BLACK);
   }
 
-  gfx->setCursor(random(gfx->width()), random(gfx->height()));
-  gfx->setTextColor(random(0xffff), random(0xffff));
-  gfx->setTextSize(random(6) /* x scale */, random(6) /* y scale */, random(2) /* pixel_margin */);
-  gfx->println("Hello World!");
+  if (dexcom.accountStatus != DexcomStatus::LoggedIn) {
+    delay(DELAY_TIME);
+    return;
+  }
 
-  delay(200);
+  displayStatus("Getting data...");
+
+  GlucoseData d = dexcom.getLastGlucose();
+  if (d.glucose == -1) {
+    displayStatus("No glucose data");
+    delay(DELAY_TIME);
+    return;
+  }
+  USBSerial.print("Glucose: ");
+  USBSerial.println(d.glucose);
+
+  // trend to string
+  const char* trendStr;
+  switch (d.trend) {
+    case GlucoseTrend::DoubleUp: trendStr = "Rising fast"; break;
+    case GlucoseTrend::SingleUp: trendStr = "Rising"; break;
+    case GlucoseTrend::FortyFiveUp: trendStr = "Slightly rising"; break;
+    case GlucoseTrend::Flat: trendStr = "Steady :)"; break;
+    case GlucoseTrend::FortyFiveDown: trendStr = "Slightly falling"; break;
+    case GlucoseTrend::SingleDown: trendStr = "Falling"; break;
+    case GlucoseTrend::DoubleDown: trendStr = "Falling fast"; break;
+    case GlucoseTrend::NotComputable:
+    case GlucoseTrend::RateOutOfRange:
+    default:
+      trendStr = "Not computable/Value out of range";
+      break;
+  }
+
+  gfx->fillScreen(RGB565_BLACK);
+  gfx->setCursor(0, gfx->height()/3);
+  gfx->setTextSize(5);
+  gfx->setTextColor(RGB565_WHITE, RGB565_BLACK);
+  // gfx->setTextSize(random(6) /* x scale */, random(6) /* y scale */, random(2) /* pixel_margin */);
+  gfx->printf("Glucose:\n%d mg/dL\n%s", d.glucose, trendStr);
+
+  delay(DELAY_TIME);
+}
+
+void Arduino_IIC_Touch_Interrupt(void) {
+  FT3168->IIC_Interrupt_Flag = true;
+}
+
+void displayStatus(const char* message) {
+  // gfx->fillScreen(RGB565_BLACK);
+  // gfx->setCursor(0, 0);
+  USBSerial.println(message);
+  gfx->setTextColor(RGB565_WHITE, RGB565_BLACK);
+  gfx->setTextSize(2);
+  gfx->println(message);
 }
