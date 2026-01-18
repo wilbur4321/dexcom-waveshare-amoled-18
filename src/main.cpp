@@ -126,10 +126,13 @@ void loop() {
 
   gfx->fillScreen(RGB565_BLACK);
   gfx->setCursor(0, gfx->height()/3);
-  gfx->setTextSize(5);
   gfx->setTextColor(RGB565_WHITE, RGB565_BLACK);
-  // gfx->setTextSize(random(6) /* x scale */, random(6) /* y scale */, random(2) /* pixel_margin */);
-  gfx->printf("Glucose:\n%d mg/dL\n%s", d.glucose, trendStr);
+  gfx->setTextSize(4);
+  gfx->println("Glucose:");
+  gfx->setTextSize(6);
+  gfx->printf("%d mg/dL\n", d.glucose);
+  gfx->setTextSize(4);
+  gfx->println(trendStr);
 
   delay(DELAY_TIME);
 }
