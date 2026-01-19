@@ -1,9 +1,10 @@
 #include <Arduino.h>
-#include "Arduino_GFX_Library.h"
-#include "Arduino_DriveBus_Library.h"
-#include "HWCDC.h"
+#include <Arduino_GFX_Library.h>
+#include <Arduino_DriveBus_Library.h>
+#include <HWCDC.h>
 #include <Wire.h>
 #include <Dexcom.h>
+#include <time.h>
 #include "pin_config.h"
 
 #include "secrets.h"
@@ -65,6 +66,9 @@ void setup() {
     USBSerial.print(".");
   }
   USBSerial.println(" CONNECTED");
+
+  displayStatus("Getting time...");
+  configTime(GMT_OFFSET_SEC, IS_DAYLIGHT_SAVINGS ? 3600 : 0, "pool.ntp.org");
 
   displayStatus("Connecting to Dexcom...");
   USBSerial.printf("Connecting to Dexcom account %s ", dexcom_username);
@@ -133,6 +137,12 @@ void loop() {
   gfx->printf("%d mg/dL\n", d.glucose);
   gfx->setTextSize(4);
   gfx->println(trendStr);
+
+  gfx->setCursor(40, gfx->height() - 40);
+  struct tm now;
+  getLocalTime(&now);
+  gfx->setTextSize(3);
+  gfx->printf("%02d:%02d", now.tm_hour, now.tm_min);
 
   delay(DELAY_TIME);
 }
