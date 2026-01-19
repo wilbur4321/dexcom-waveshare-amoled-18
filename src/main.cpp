@@ -13,7 +13,7 @@
 HWCDC USBSerial;
 
 #define DELAY_TIME 60000
-Dexcom dexcom(dexcom_ous, USBSerial);
+Dexcom dexcom(USBSerial);
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   LCD_CS /* CS */, LCD_SCLK /* SCK */, LCD_SDIO0 /* SDIO0 */, LCD_SDIO1 /* SDIO1 */,
@@ -72,7 +72,7 @@ void setup() {
 
   displayStatus("Connecting to Dexcom...");
   USBSerial.printf("Connecting to Dexcom account %s ", dexcom_username);
-  dexcom.createSession(dexcom_username, dexcom_password);
+  dexcom.createSession(dexcom_username, dexcom_password, dexcom_ous);
   if (dexcom.accountStatus == DexcomStatus::LoggedIn) {
     displayStatus("Connected!");
   } else {
