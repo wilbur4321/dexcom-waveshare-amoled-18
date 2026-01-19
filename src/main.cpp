@@ -169,7 +169,6 @@ void wifiManagerCallback(WiFiManager *wm) {
 
 bool runConfigPortal() {
   WiFiManager wm(USBSerial);
-  wm.resetSettings();
   wm.setAPCallback(wifiManagerCallback);
   // wm.setConfigPortalTimeout(180); // 3 minutes
   bool res;
