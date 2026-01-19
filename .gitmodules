@@ -1,0 +1,3 @@
+[submodule "lib/DexcomAPI"]
+	path = lib/DexcomAPI
+	url = https://github.com/wilbur4321/DexcomAPI.git

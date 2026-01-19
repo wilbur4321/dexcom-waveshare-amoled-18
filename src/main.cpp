@@ -10,10 +10,10 @@
 
 #include "secrets.h"
 
-#define DELAY_TIME 60000
-Dexcom dexcom;
-
 HWCDC USBSerial;
+
+#define DELAY_TIME 60000
+Dexcom dexcom(dexcom_ous, USBSerial);
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   LCD_CS /* CS */, LCD_SCLK /* SCK */, LCD_SDIO0 /* SDIO0 */, LCD_SDIO1 /* SDIO1 */,
