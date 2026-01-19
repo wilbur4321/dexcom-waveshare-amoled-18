@@ -162,9 +162,8 @@ void displayStatus(const char* message) {
 }
 
 void wifiManagerCallback(WiFiManager *wm) {
-  USBSerial.println("Entered config mode");
-  USBSerial.println(WiFi.softAPIP());
-  USBSerial.println(wm->getConfigPortalSSID());
+  displayStatus("Config Portal SSID:\n");
+  displayStatus(wm->getConfigPortalSSID().c_str());
 }
 
 bool runConfigPortal() {
