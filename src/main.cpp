@@ -5,6 +5,7 @@
 #include <Wire.h>
 #include <Dexcom.h>
 #include <time.h>
+#include <WiFiManager.h>
 #include "pin_config.h"
 
 #include "secrets.h"
@@ -26,6 +27,7 @@ std::shared_ptr<Arduino_IIC_DriveBus> IIC_Bus =
 
 void Arduino_IIC_Touch_Interrupt(void);
 void displayStatus(const char* message);
+bool runConfigPortal();
 
 std::unique_ptr<Arduino_IIC> FT3168(new Arduino_FT3x68(
     IIC_Bus, FT3168_DEVICE_ADDRESS,
@@ -58,14 +60,12 @@ void setup() {
   gfx->setTextColor(RGB565_RED);
   gfx->setTextSize(3);
 
-  displayStatus("Connecting to WiFi...");
-  USBSerial.printf("Connecting to %s  ", wifi_ssid);
-  WiFi.begin(wifi_ssid, wifi_password);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    USBSerial.print(".");
+  if (!runConfigPortal()) {
+    displayStatus("Failed to connect and hit timeout");
+    while (true) {
+      delay(1000);
+    }
   }
-  USBSerial.println(" CONNECTED");
 
   displayStatus("Getting time...");
   configTime(GMT_OFFSET_SEC, IS_DAYLIGHT_SAVINGS ? 3600 : 0, "pool.ntp.org");
@@ -86,6 +86,7 @@ void setup() {
         case DexcomStatus::PasswordNullEmpty: displayStatus("Password NULL or empty"); break;
         default: displayStatus("Unknown error"); break;
     }
+    // TODO: start config portal again?
   }
 }
 
@@ -158,4 +159,26 @@ void displayStatus(const char* message) {
   gfx->setTextColor(RGB565_WHITE, RGB565_BLACK);
   gfx->setTextSize(2);
   gfx->println(message);
+}
+
+void wifiManagerCallback(WiFiManager *wm) {
+  USBSerial.println("Entered config mode");
+  USBSerial.println(WiFi.softAPIP());
+  USBSerial.println(wm->getConfigPortalSSID());
+}
+
+bool runConfigPortal() {
+  WiFiManager wm(USBSerial);
+  wm.resetSettings();
+  wm.setAPCallback(wifiManagerCallback);
+  // wm.setConfigPortalTimeout(180); // 3 minutes
+  bool res;
+  res = wm.autoConnect(); // auto generated AP name from chipid
+  // res = wm.autoConnect(WM_AP, WM_PASSWORD);
+  if (res) {
+    displayStatus("WiFi connected!");
+  } else {
+    displayStatus("Failed to connect");
+  }
+  return res;
 }
