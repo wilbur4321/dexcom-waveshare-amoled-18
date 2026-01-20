@@ -27,6 +27,7 @@ std::shared_ptr<Arduino_IIC_DriveBus> IIC_Bus =
 
 void Arduino_IIC_Touch_Interrupt(void);
 void displayStatus(const char* message);
+void getAndDisplayTime();
 bool runConfigPortal();
 
 std::unique_ptr<Arduino_IIC> FT3168(new Arduino_FT3x68(
@@ -111,6 +112,18 @@ void loop() {
   }
   USBSerial.print("Glucose: ");
   USBSerial.println(d.glucose);
+  USBSerial.print("Timestamp: ");
+  USBSerial.println(d.timestamp);
+  USBSerial.print("Current time: ");
+  time_t ttnow;
+  time(&ttnow);
+  USBSerial.println(ttnow * 1000ULL);
+  auto diffMS = ttnow * 1000ULL - d.timestamp;
+  auto diffM = diffMS / 1000ULL / 60ULL;
+  USBSerial.print("Difference (ms): ");
+  USBSerial.println(diffMS);
+  USBSerial.print("Difference (min): ");
+  USBSerial.println(diffM);
 
   // trend to string
   const char* trendStr;
@@ -138,14 +151,24 @@ void loop() {
   gfx->printf("%d mg/dL\n", d.glucose);
   gfx->setTextSize(4);
   gfx->println(trendStr);
+  gfx->println();
+  gfx->printf("Age: %llu:%02llu min", diffM, diffMS / 1000ULL % 60ULL);
 
-  gfx->setCursor(40, gfx->height() - 40);
-  struct tm now;
-  getLocalTime(&now);
-  gfx->setTextSize(3);
-  gfx->printf("%02d:%02d", now.tm_hour, now.tm_min);
+  getAndDisplayTime();
 
   delay(DELAY_TIME);
+}
+
+void getAndDisplayTime() {
+  struct tm now;
+  if (!getLocalTime(&now)) {
+    displayStatus("Failed to obtain time");
+    return;
+  }
+
+  gfx->setCursor(40, gfx->height() - 40);
+  gfx->setTextSize(3);
+  gfx->printf("%02d:%02d", now.tm_hour, now.tm_min);
 }
 
 void Arduino_IIC_Touch_Interrupt(void) {
