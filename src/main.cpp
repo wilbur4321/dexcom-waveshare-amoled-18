@@ -106,7 +106,6 @@ void loop() {
     FT3168->IIC_Interrupt_Flag = false;
   }
 
-  bool readData = false;
   if (dexcom.accountStatus == DexcomStatus::LoggedIn) {
     if (now - lastFetchTime > FETCH_INTERVAL_SECONDS &&
         (lastData.glucose == -1 || now - lastData.timestamp / 1000ULL > READING_INTERFVAL_SECONDS)) {
@@ -116,7 +115,7 @@ void loop() {
       GlucoseData d = dexcom.getLastGlucose();
       if (d.glucose != -1) {
         lastData = d;
-        readData = false;
+        needsFullRedraw = true;
       }
     }
   }
@@ -130,7 +129,7 @@ void loop() {
     gfx->setTextColor(RGB565_RED, RGB565_BLACK);
     gfx->setTextSize(4);
     gfx->println("No glucose data");
-  } else if (readData || needsFullRedraw) {
+  } else if (needsFullRedraw) {
     // trend to string
     const char* trendStr;
     switch (lastData.trend) {
