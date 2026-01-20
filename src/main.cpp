@@ -13,8 +13,13 @@
 HWCDC USBSerial;
 GlucoseData lastData;
 time_t lastFetchTime = 0;
+bool needsFullRedraw = true;
 
+// don't ever fetch more often than this, we don't need to hammer the API
 #define FETCH_INTERVAL_SECONDS 60
+// readings are typically every 5 minutes, but sometimes delayed
+#define READING_INTERFVAL_SECONDS 315
+
 Dexcom dexcom(USBSerial);
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
@@ -99,69 +104,75 @@ void loop() {
 
   if (FT3168->IIC_Interrupt_Flag == true) {
     FT3168->IIC_Interrupt_Flag = false;
-    gfx->fillScreen(RGB565_BLACK);
   }
 
+  bool readData = false;
   if (dexcom.accountStatus == DexcomStatus::LoggedIn) {
-    if (now - lastFetchTime > FETCH_INTERVAL_SECONDS) {
+    if (now - lastFetchTime > FETCH_INTERVAL_SECONDS &&
+        (lastData.glucose == -1 || now - lastData.timestamp / 1000ULL > READING_INTERFVAL_SECONDS)) {
       lastFetchTime = now;
       displayStatus("Getting data...");
 
       GlucoseData d = dexcom.getLastGlucose();
-      if (d.glucose == -1) {
-        displayStatus("No glucose data");
-      } else {
+      if (d.glucose != -1) {
         lastData = d;
+        readData = false;
       }
     }
   }
 
-  if (lastData.glucose == -1) {
+  if (needsFullRedraw) {
     gfx->fillScreen(RGB565_BLACK);
+  }
+
+  if (lastData.glucose == -1) {
     gfx->setCursor(0, gfx->height()/3);
     gfx->setTextColor(RGB565_RED, RGB565_BLACK);
     gfx->setTextSize(4);
     gfx->println("No glucose data");
-    delay(100);
-    return;
+  } else if (readData || needsFullRedraw) {
+    // trend to string
+    const char* trendStr;
+    switch (lastData.trend) {
+      case GlucoseTrend::DoubleUp: trendStr = "Rising fast"; break;
+      case GlucoseTrend::SingleUp: trendStr = "Rising"; break;
+      case GlucoseTrend::FortyFiveUp: trendStr = "Slightly rising"; break;
+      case GlucoseTrend::Flat: trendStr = "Steady :)"; break;
+      case GlucoseTrend::FortyFiveDown: trendStr = "Slightly falling"; break;
+      case GlucoseTrend::SingleDown: trendStr = "Falling"; break;
+      case GlucoseTrend::DoubleDown: trendStr = "Falling fast"; break;
+      case GlucoseTrend::NotComputable:
+      case GlucoseTrend::RateOutOfRange:
+      default:
+        trendStr = "Not computable/Value out of range";
+        break;
+    }
+
+    // show current glucose data
+    gfx->setCursor(0, 60);
+    gfx->setTextColor(RGB565_WHITE, RGB565_BLACK);
+    gfx->setTextSize(6);
+    gfx->printf("%d mg/dL", lastData.glucose);
+    gfx->setCursor(0, 120);
+    gfx->setTextSize(4);
+    gfx->println(trendStr);
   }
 
-  // trend to string
-  const char* trendStr;
-  switch (lastData.trend) {
-    case GlucoseTrend::DoubleUp: trendStr = "Rising fast"; break;
-    case GlucoseTrend::SingleUp: trendStr = "Rising"; break;
-    case GlucoseTrend::FortyFiveUp: trendStr = "Slightly rising"; break;
-    case GlucoseTrend::Flat: trendStr = "Steady :)"; break;
-    case GlucoseTrend::FortyFiveDown: trendStr = "Slightly falling"; break;
-    case GlucoseTrend::SingleDown: trendStr = "Falling"; break;
-    case GlucoseTrend::DoubleDown: trendStr = "Falling fast"; break;
-    case GlucoseTrend::NotComputable:
-    case GlucoseTrend::RateOutOfRange:
-    default:
-      trendStr = "Not computable/Value out of range";
-      break;
-  }
-
-  // gfx->fillScreen(RGB565_BLACK);
-  gfx->setCursor(0, gfx->height()/3);
-  gfx->setTextColor(RGB565_WHITE, RGB565_BLACK);
-  gfx->setTextSize(4);
-  gfx->println("Glucose:");
-  gfx->setTextSize(6);
-  gfx->printf("%d mg/dL\n", lastData.glucose);
-  gfx->setTextSize(4);
-  gfx->println(trendStr);
-
-  // calculate and show age
+  // calculate and refresh age
   auto diffMS = now * 1000ULL - lastData.timestamp;
   auto diffM = diffMS / 1000ULL / 60ULL;
-  gfx->println();
-  gfx->printf("Age: %llu:%02llu min", diffM, diffMS / 1000ULL % 60ULL);
+  gfx->setTextSize(3);
+  gfx->setCursor(gfx->width() - 200, gfx->height() - 40);
+  gfx->printf("Age: %llu:%02llu", diffM, diffMS / 1000ULL % 60ULL);
 
+  // refresh clock
   getAndDisplayTime();
 
-  delay(100); // TODO: adjust delay as needed
+  // prepare for next loop
+  needsFullRedraw = false;
+  gfx->setCursor(40, 0);
+
+  delay(100);
 }
 
 void getAndDisplayTime() {
@@ -178,6 +189,7 @@ void getAndDisplayTime() {
 
 void Arduino_IIC_Touch_Interrupt(void) {
   FT3168->IIC_Interrupt_Flag = true;
+  needsFullRedraw = true;
 }
 
 void displayStatus(const char* message) {
@@ -187,6 +199,7 @@ void displayStatus(const char* message) {
   gfx->setTextColor(RGB565_WHITE, RGB565_BLACK);
   gfx->setTextSize(2);
   gfx->println(message);
+  needsFullRedraw = true;
 }
 
 void wifiManagerCallback(WiFiManager *wm) {
