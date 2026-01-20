@@ -110,20 +110,6 @@ void loop() {
     delay(DELAY_TIME);
     return;
   }
-  USBSerial.print("Glucose: ");
-  USBSerial.println(d.glucose);
-  USBSerial.print("Timestamp: ");
-  USBSerial.println(d.timestamp);
-  USBSerial.print("Current time: ");
-  time_t ttnow;
-  time(&ttnow);
-  USBSerial.println(ttnow * 1000ULL);
-  auto diffMS = ttnow * 1000ULL - d.timestamp;
-  auto diffM = diffMS / 1000ULL / 60ULL;
-  USBSerial.print("Difference (ms): ");
-  USBSerial.println(diffMS);
-  USBSerial.print("Difference (min): ");
-  USBSerial.println(diffM);
 
   // trend to string
   const char* trendStr;
@@ -151,6 +137,12 @@ void loop() {
   gfx->printf("%d mg/dL\n", d.glucose);
   gfx->setTextSize(4);
   gfx->println(trendStr);
+
+  // calculate and show age
+  time_t ttnow;
+  time(&ttnow);
+  auto diffMS = ttnow * 1000ULL - d.timestamp;
+  auto diffM = diffMS / 1000ULL / 60ULL;
   gfx->println();
   gfx->printf("Age: %llu:%02llu min", diffM, diffMS / 1000ULL % 60ULL);
 
