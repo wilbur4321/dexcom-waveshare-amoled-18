@@ -11,8 +11,10 @@
 #include "secrets.h"
 
 HWCDC USBSerial;
+GlucoseData lastData;
+time_t lastFetchTime = 0;
 
-#define DELAY_TIME 60000
+#define FETCH_INTERVAL_SECONDS 60
 Dexcom dexcom(USBSerial);
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
@@ -92,28 +94,41 @@ void setup() {
 }
 
 void loop() {
+  time_t now;
+  time(&now);
+
   if (FT3168->IIC_Interrupt_Flag == true) {
     FT3168->IIC_Interrupt_Flag = false;
     gfx->fillScreen(RGB565_BLACK);
   }
 
-  if (dexcom.accountStatus != DexcomStatus::LoggedIn) {
-    delay(DELAY_TIME);
-    return;
+  if (dexcom.accountStatus == DexcomStatus::LoggedIn) {
+    if (now - lastFetchTime > FETCH_INTERVAL_SECONDS) {
+      lastFetchTime = now;
+      displayStatus("Getting data...");
+
+      GlucoseData d = dexcom.getLastGlucose();
+      if (d.glucose == -1) {
+        displayStatus("No glucose data");
+      } else {
+        lastData = d;
+      }
+    }
   }
 
-  displayStatus("Getting data...");
-
-  GlucoseData d = dexcom.getLastGlucose();
-  if (d.glucose == -1) {
-    displayStatus("No glucose data");
-    delay(DELAY_TIME);
+  if (lastData.glucose == -1) {
+    gfx->fillScreen(RGB565_BLACK);
+    gfx->setCursor(0, gfx->height()/3);
+    gfx->setTextColor(RGB565_RED, RGB565_BLACK);
+    gfx->setTextSize(4);
+    gfx->println("No glucose data");
+    delay(100);
     return;
   }
 
   // trend to string
   const char* trendStr;
-  switch (d.trend) {
+  switch (lastData.trend) {
     case GlucoseTrend::DoubleUp: trendStr = "Rising fast"; break;
     case GlucoseTrend::SingleUp: trendStr = "Rising"; break;
     case GlucoseTrend::FortyFiveUp: trendStr = "Slightly rising"; break;
@@ -128,27 +143,25 @@ void loop() {
       break;
   }
 
-  gfx->fillScreen(RGB565_BLACK);
+  // gfx->fillScreen(RGB565_BLACK);
   gfx->setCursor(0, gfx->height()/3);
   gfx->setTextColor(RGB565_WHITE, RGB565_BLACK);
   gfx->setTextSize(4);
   gfx->println("Glucose:");
   gfx->setTextSize(6);
-  gfx->printf("%d mg/dL\n", d.glucose);
+  gfx->printf("%d mg/dL\n", lastData.glucose);
   gfx->setTextSize(4);
   gfx->println(trendStr);
 
   // calculate and show age
-  time_t ttnow;
-  time(&ttnow);
-  auto diffMS = ttnow * 1000ULL - d.timestamp;
+  auto diffMS = now * 1000ULL - lastData.timestamp;
   auto diffM = diffMS / 1000ULL / 60ULL;
   gfx->println();
   gfx->printf("Age: %llu:%02llu min", diffM, diffMS / 1000ULL % 60ULL);
 
   getAndDisplayTime();
 
-  delay(DELAY_TIME);
+  delay(100); // TODO: adjust delay as needed
 }
 
 void getAndDisplayTime() {
